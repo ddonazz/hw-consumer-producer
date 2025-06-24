@@ -1,18 +1,22 @@
+#ifndef BUFFER_H
+#define BUFFER_H
+
 #include <pthread.h>
-#include "message.h"
+#include "message.h" 
 
 #define BUFFER_ERROR (msg_t *) NULL
 
 typedef struct buffer {
 	msg_t **messages;
-    unsigned int maxSize;
-    unsigned int index;
+    unsigned int max_size;
+    unsigned int current_size;
     pthread_mutex_t mutex;
-    pthread_cond_t isNotFull;
-    pthread_cond_t isNotEmpty;
+    pthread_cond_t is_not_full;
+    pthread_cond_t is_not_empty;
 } buffer_t;
 
 /* allocazione / deallocazione buffer */
+
 // creazione di un buffer vuoto di dim. max nota
 buffer_t* buffer_init(unsigned int maxsize);
 
@@ -20,6 +24,7 @@ buffer_t* buffer_init(unsigned int maxsize);
 void buffer_destroy(buffer_t* buffer);
 
 /* operazioni sul buffer */
+
 // inserimento bloccante: sospende se pieno, quindi
 // effettua l’inserimento non appena si libera dello spazio
 // restituisce il messaggio inserito; N.B.: msg!=null
@@ -37,3 +42,5 @@ msg_t* get_bloccante(buffer_t* buffer);
 // estrazione non bloccante: restituisce BUFFER_ERROR se vuoto
 // ed il valore estratto in caso contrario
 msg_t* get_non_bloccante(buffer_t* buffer);
+
+#endif // BUFFER_H
