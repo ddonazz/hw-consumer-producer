@@ -113,10 +113,10 @@ void test_P1_C0_N1_put_single_empty(void)
 
     CU_ASSERT_PTR_EQUAL(put_result, msg_to_put);
     CU_ASSERT_EQUAL(buffer->current_size, 1);
-    CU_ASSERT_PTR_EQUAL(buffer->messages[0], msg_to_put); // Assume LIFO/FIFO accesso diretto per verifica
+    CU_ASSERT_PTR_EQUAL(buffer->messages[0], msg_to_put);
     CU_ASSERT_STRING_EQUAL(buffer->messages[0]->content, "HELLO");
 
-    buffer_destroy(buffer); // Dovrebbe distruggere msg_to_put
+    buffer_destroy(buffer);
 }
 
 // • (P=0; C=1; N=1) Consumazione di un solo messaggio da un buffer pieno
@@ -131,7 +131,7 @@ void test_P0_C1_N1_get_single_full(void)
 
     CU_ASSERT_EQUAL(buffer->current_size, 1);
 
-    msg_t *retrieved_msg = get_non_bloccante(buffer); // O bloccante
+    msg_t *retrieved_msg = get_non_bloccante(buffer);
 
     CU_ASSERT_PTR_EQUAL(retrieved_msg, msg_in_buffer);
     CU_ASSERT_EQUAL(buffer->current_size, 0);
@@ -179,7 +179,7 @@ void test_P0_C1_N1_get_non_blocking_empty(void)
     buffer_destroy(buffer);
 }
 
-// Consumazione bloccante da un buffer inizialmente vuoto (esempio dalla traccia)
+// Consumazione bloccante da un buffer inizialmente vuoto
 void test_blocking_consumer_initially_empty(void)
 {
     pthread_t consumer_tid;
@@ -192,22 +192,20 @@ void test_blocking_consumer_initially_empty(void)
     // Creazione del consumatore che si bloccherà
     pthread_create(&consumer_tid, NULL, consumer_thread_blocking, &data);
 
-    // Diamo un po' di tempo al consumatore per bloccarsi (non ideale per test unitari robusti, ma semplice)
-    // In un sistema reale, si userebbero meccanismi di segnalazione più sofisticati
-    sleep(1); // Sleep per 1 secondo. Rimuovere o ridurre se causa problemi/lentezza.
-              // L'assunto è che 1s sia sufficiente per il thread consumer per chiamare get_bloccante e sospendersi.
+    // Diamo un po' di tempo al consumatore per bloccarsi
+    sleep(1); // L'assunto è che 1s sia sufficiente per il thread consumer per chiamare get_bloccante e sospendersi.
 
     // Il consumatore dovrebbe essere bloccato. Sblocchiamolo.
     msg_t *go_msg = msg_init_string("GO_MSG");
     CU_ASSERT_PTR_NOT_NULL_FATAL(go_msg);
-    msg_t *put_res = put_bloccante(data.buffer, go_msg); // O non_bloccante
+    msg_t *put_res = put_bloccante(data.buffer, go_msg); 
     CU_ASSERT_PTR_EQUAL(put_res, go_msg);
 
     pthread_join(consumer_tid, NULL); // Aspetta che il consumatore termini
 
     CU_ASSERT_PTR_NOT_NULL(data.msg_retrieved);
     if (data.msg_retrieved)
-    { // Controlla per evitare dereferenziazione NULL
+    { 
         CU_ASSERT_STRING_EQUAL(data.msg_retrieved->content, "GO_MSG");
         CU_ASSERT_PTR_EQUAL(data.msg_retrieved, go_msg); // Dovrebbe essere lo stesso puntatore
     }
@@ -215,7 +213,7 @@ void test_blocking_consumer_initially_empty(void)
 
     if (data.msg_retrieved)
     {
-        msg_destroy_string(data.msg_retrieved); // Il consumatore "possiede" il messaggio
+        msg_destroy_string(data.msg_retrieved);
     }
     buffer_destroy(data.buffer);
 }
@@ -267,7 +265,7 @@ void test_P1_C1_N1_concurrent_producer_first(void)
     {
         msg_destroy_string(consumer_data.msg_retrieved);
     }
-    // producer_data.msg_to_put è ora "posseduto" e distrutto tramite consumer_data.msg_retrieved
+
     buffer_destroy(common_buffer);
 }
 
@@ -292,15 +290,12 @@ void test_Pgt1_C0_N1_concurrent_puts_blocking(void)
 
     // Avvia P1, dovrebbe riuscire e riempire il buffer
     pthread_create(&p1_tid, NULL, producer_thread_blocking, &p1_data);
-    // Dai un attimo a P1 per eseguire e riempire
-    // sleep(0.1); // Molto breve, o usa join se vuoi essere seriale per il primo put
+    pthread_join(p1_tid, NULL);
 
     // Avvia P2, dovrebbe bloccarsi perché il buffer è pieno
     pthread_create(&p2_tid, NULL, producer_thread_blocking, &p2_data);
-    sleep(1); // Dai tempo a P2 per provare a mettere e bloccarsi
+    sleep(1); 
 
-    // Verifica che P1 sia riuscito (o attendi che finisca)
-    pthread_join(p1_tid, NULL); // Assicura che P1 abbia finito
     CU_ASSERT_PTR_EQUAL(p1_data.msg_put_result, p1_data.msg_to_put);
     CU_ASSERT_EQUAL(buffer->current_size, 1);
     CU_ASSERT_PTR_EQUAL(buffer->messages[0], p1_data.msg_to_put);
@@ -308,7 +303,7 @@ void test_Pgt1_C0_N1_concurrent_puts_blocking(void)
     // Ora consuma il messaggio di P1, questo dovrebbe sbloccare P2
     msg_t *retrieved_p1_msg = get_bloccante(buffer);
     CU_ASSERT_PTR_EQUAL(retrieved_p1_msg, p1_data.msg_to_put);
-    msg_destroy_string(retrieved_p1_msg); // Distruggi il messaggio recuperato
+    msg_destroy_string(retrieved_p1_msg); 
 
     // Aspetta che P2 finisca (ora dovrebbe essere sbloccato)
     pthread_join(p2_tid, NULL);
@@ -338,13 +333,12 @@ void test_P0_Cgt1_N1_concurrent_gets_blocking(void)
 
     // Avvia C1, dovrebbe riuscire e svuotare il buffer
     pthread_create(&c1_tid, NULL, consumer_thread_blocking, &c1_data);
-    // sleep(0.1); // Dai un attimo a C1 per eseguire
+    pthread_join(c1_tid, NULL); // Assicura che C1 abbia finito
 
     // Avvia C2, dovrebbe bloccarsi perché il buffer è vuoto
     pthread_create(&c2_tid, NULL, consumer_thread_blocking, &c2_data);
     sleep(1); // Dai tempo a C2 per provare a prendere e bloccarsi
 
-    pthread_join(c1_tid, NULL); // Assicura che C1 abbia finito
     CU_ASSERT_PTR_EQUAL(c1_data.msg_retrieved, initial_msg);
     CU_ASSERT_EQUAL(buffer->current_size, 0);
 
@@ -373,13 +367,15 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_no_fill(void)
     CU_ASSERT_PTR_NOT_NULL_FATAL(buffer);
 
     char msg_content[20];
+    msg_t *msgs_to_put[NUM_PRODUCERS]; // Per tenere traccia dei puntatori originali per le asserzioni
 
     for (int i = 0; i < NUM_PRODUCERS; i++)
     {
         p_data[i].buffer = buffer;
         sprintf(msg_content, "MSG_NP_%d", i);
-        p_data[i].msg_to_put = msg_init_string(msg_content);
-        CU_ASSERT_PTR_NOT_NULL_FATAL(p_data[i].msg_to_put);
+        msgs_to_put[i] = msg_init_string(msg_content);
+        CU_ASSERT_PTR_NOT_NULL_FATAL(msgs_to_put[i]);
+        p_data[i].msg_to_put = msgs_to_put[i];
         p_data[i].msg_put_result = NULL;
         pthread_create(&p_tids[i], NULL, producer_thread_blocking, &p_data[i]);
     }
@@ -387,13 +383,11 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_no_fill(void)
     for (int i = 0; i < NUM_PRODUCERS; i++)
     {
         pthread_join(p_tids[i], NULL);
-        CU_ASSERT_PTR_EQUAL(p_data[i].msg_put_result, p_data[i].msg_to_put);
+        CU_ASSERT_PTR_EQUAL(p_data[i].msg_put_result, msgs_to_put[i]);
+        CU_ASSERT_STRING_EQUAL(p_data[i].msg_put_result->content, msgs_to_put[i]->content)
     }
 
     CU_ASSERT_EQUAL(buffer->current_size, NUM_PRODUCERS);
-    // Verifica opzionale del contenuto (ordine potrebbe non essere garantito)
-    // Per semplicità, ci fidiamo che i messaggi siano lì se current_size è corretto
-    // e put_result era corretto.
 
     buffer_destroy(buffer); // Distruggerà i messaggi messi
 }
@@ -402,7 +396,7 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_no_fill(void)
 void test_Pgt1_C0_Ngt1_concurrent_puts_nonblocking_on_full(void)
 {
     const int NUM_PRODUCERS_FAIL = 2;
-    const int BUFFER_SIZE = 1; // Un buffer piccolo per saturarlo facilmente
+    const int BUFFER_SIZE = 1; 
     pthread_t p_tids[NUM_PRODUCERS_FAIL];
     thread_data_t p_data[NUM_PRODUCERS_FAIL];
     buffer_t *buffer = buffer_init(BUFFER_SIZE);
@@ -421,7 +415,6 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_nonblocking_on_full(void)
         sprintf(msg_content, "MSG_FAIL_%d", i);
         p_data[i].msg_to_put = msg_init_string(msg_content); // Questi verranno distrutti
         CU_ASSERT_PTR_NOT_NULL_FATAL(p_data[i].msg_to_put);
-        p_data[i].msg_put_result = (msg_t *)0x1; // Valore non NULL e non BUFFER_ERROR per vedere se cambia
         pthread_create(&p_tids[i], NULL, producer_thread_non_blocking, &p_data[i]);
     }
 
@@ -432,17 +425,17 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_nonblocking_on_full(void)
         msg_destroy_string(p_data[i].msg_to_put); // Distruggiamo perché put_non_bloccante è fallito
     }
 
-    CU_ASSERT_EQUAL(buffer->current_size, BUFFER_SIZE);           // Dimensione non cambiata
-    CU_ASSERT_STRING_EQUAL(buffer->messages[0]->content, "FULL"); // Contenuto originale
+    CU_ASSERT_EQUAL(buffer->current_size, BUFFER_SIZE);           
+    CU_ASSERT_STRING_EQUAL(buffer->messages[0]->content, "FULL"); 
 
-    buffer_destroy(buffer); // Distrugge initial_fill_msg
+    buffer_destroy(buffer); 
 }
 
 // • (P>1; C=0; N>1) Produzione concorrente di molteplici messaggi in un buffer vuoto; il buffer si satura in corso
 void test_Pgt1_C0_Ngt1_concurrent_puts_fill_and_block(void)
 {
     const int NUM_PRODUCERS = 3;
-    const int BUFFER_SIZE = 2; // Buffer più piccolo del numero di produttori
+    const int BUFFER_SIZE = 2; 
     pthread_t p_tids[NUM_PRODUCERS];
     thread_data_t p_data[NUM_PRODUCERS];
     buffer_t *buffer = buffer_init(BUFFER_SIZE);
@@ -462,11 +455,10 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_fill_and_block(void)
         pthread_create(&p_tids[i], NULL, producer_thread_blocking, &p_data[i]);
     }
 
-    // Dai tempo ai primi BUFFER_SIZE produttori di riempire il buffer
-    // e al/ai rimanente/i di bloccarsi. usleep è preferibile a sleep per test più veloci.
-    usleep(200000); // 0.2 secondi, un po' più di margine rispetto a 0.1s
+    // Aspettiamo che i P riempiano il buffer e che uno stia in attesa
+    sleep(1); 
 
-    CU_ASSERT_EQUAL(buffer->current_size, BUFFER_SIZE); // Buffer dovrebbe essere pieno (2)
+    CU_ASSERT_EQUAL(buffer->current_size, BUFFER_SIZE); // Buffer dovrebbe essere pieno
 
     // Consuma un messaggio per sbloccare uno dei produttori bloccati
     msg_t *retrieved1 = get_bloccante(buffer);
@@ -474,7 +466,6 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_fill_and_block(void)
     msg_destroy_string(retrieved1);
     // Ora current_size è BUFFER_SIZE - 1. Un produttore bloccato dovrebbe procedere.
 
-    // Aspetta tutti i produttori.
     // Tutti e 3 i produttori dovrebbero completare il loro put_bloccante.
     for (int i = 0; i < NUM_PRODUCERS; i++)
     {
@@ -483,12 +474,7 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_fill_and_block(void)
         CU_ASSERT_PTR_EQUAL(p_data[i].msg_put_result, msgs_to_put[i]);
     }
 
-    // Dopo che 3 messaggi sono stati messi e 1 consumato, il buffer dovrebbe essere di nuovo pieno.
-    // current_size = (messaggi messi da P0,P1) + (messaggio messo da P2 dopo sblocco) - (retrieved1)
-    // Se P0, P1 riempiono -> size 2. P2 si blocca.
-    // retrieved1 consuma -> size 1. P2 si sblocca.
-    // P2 mette -> size 2.
-    CU_ASSERT_EQUAL(buffer->current_size, BUFFER_SIZE); // Dovrebbe essere di nuovo pieno (2)
+    CU_ASSERT_EQUAL(buffer->current_size, BUFFER_SIZE); // Dovrebbe essere di nuovo pieno
 
     // Svuota e verifica i restanti messaggi. Ce ne sono BUFFER_SIZE (2) rimasti.
     msg_t *retrieved2 = get_bloccante(buffer); // Prende uno dei due messaggi
@@ -499,8 +485,8 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_fill_and_block(void)
     msg_t *retrieved3 = get_bloccante(buffer); // Prende l'ultimo messaggio rimasto
     CU_ASSERT_PTR_NOT_NULL(retrieved3);
     msg_destroy_string(retrieved3);
-    // Ora current_size dovrebbe essere 0
 
+    // Ora current_size dovrebbe essere 0
     CU_ASSERT_EQUAL(buffer->current_size, 0); // Verifica che il buffer sia effettivamente vuoto
 
     buffer_destroy(buffer); // Non ci dovrebbero essere messaggi rimanenti nel buffer
@@ -510,7 +496,7 @@ void test_Pgt1_C0_Ngt1_concurrent_puts_fill_and_block(void)
 void test_P0_Cgt1_Ngt1_concurrent_gets_from_full_and_block(void)
 {
     const int NUM_CONSUMERS = 3;
-    const int BUFFER_SIZE = 2; // Buffer più piccolo del numero di consumatori
+    const int BUFFER_SIZE = 2; 
     pthread_t c_tids[NUM_CONSUMERS];
     thread_data_t c_data[NUM_CONSUMERS];
     buffer_t *buffer = buffer_init(BUFFER_SIZE);
@@ -536,8 +522,7 @@ void test_P0_Cgt1_Ngt1_concurrent_gets_from_full_and_block(void)
         pthread_create(&c_tids[i], NULL, consumer_thread_blocking, &c_data[i]);
     }
 
-    // Dai tempo ai primi BUFFER_SIZE consumatori di svuotare il buffer
-    // e al/ai rimanente/i di bloccarsi.
+    // Svuotamento BUFFER e rimane in attesa un C.
     sleep(1);
     CU_ASSERT_EQUAL(buffer->current_size, 0);
 
@@ -553,8 +538,6 @@ void test_P0_Cgt1_Ngt1_concurrent_gets_from_full_and_block(void)
         if (c_data[i].msg_retrieved != BUFFER_ERROR && c_data[i].msg_retrieved != NULL)
         {
             retrieved_count++;
-            // Verifichiamo che i messaggi siano quelli attesi (un po' complicato per l'ordine)
-            // Per semplicità, distruggiamo e basta
             msg_destroy_string(c_data[i].msg_retrieved);
         }
     }
@@ -618,10 +601,13 @@ void test_Pgt1_Cgt1_N1_stress_unitary(void)
 // • (P>1; C>1; N>1) Consumazioni e produzioni concorrenti di molteplici messaggi in un buffer
 void test_Pgt1_Cgt1_Ngt1_stress_general(void)
 {
+
+    // Se i numeri di ops per produttore e consumatore sono diversi,
+    // il buffer potrebbe non essere vuoto alla fine.
     const int NUM_PRODUCERS = 3;
     const int NUM_CONSUMERS = 3;
     const int OPS_PER_THREAD = 10;
-    const int BUFFER_SIZE = 5; // Buffer di dimensione intermedia
+    const int BUFFER_SIZE = 5; 
 
     pthread_t p_tids[NUM_PRODUCERS];
     pthread_t c_tids[NUM_CONSUMERS];
@@ -640,8 +626,6 @@ void test_Pgt1_Cgt1_Ngt1_stress_general(void)
     for (int i = 0; i < NUM_CONSUMERS; i++)
     {
         c_data[i].buffer = buffer;
-        // Se i numeri di ops per produttore e consumatore sono diversi,
-        // il buffer potrebbe non essere vuoto alla fine.
         c_data[i].num_ops = OPS_PER_THREAD;
         c_data[i].success_count = 0;
         pthread_create(&c_tids[i], NULL, multiple_consumer_thread_blocking, &c_data[i]);
